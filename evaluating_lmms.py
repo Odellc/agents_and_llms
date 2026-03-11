@@ -2,6 +2,7 @@ import litellm
 from litellm import completion
 import numpy as np
 import os
+import re
 
 if os.getenv("OPENAI_API_KEY"):
     litellm.openapi_key = os.getenv("OPENAI_API_KEY")
@@ -145,3 +146,156 @@ assert cosine_similarity[-1] < cosine_similarity[0], (
 assert cosine_similarity[-1] < cosine_similarity[1], (
     "The last pair should have the lowest cosine similarity. Please check your prediction sentence."
 )
+
+
+#Functional Correctness Evaluation =====================================================
+
+
+def sort_and_normalize(s: str) -> str:
+    """Sort the words in the string"""
+
+    # Our toy function will fail on this edge case
+    if "armadillo" in s:
+        s = s.replace("armadillo", "kitty")
+
+    return " ".join(sorted(s.split()))
+
+
+preds = [
+    "the capybara is the largest rodent",
+    "an armadillo has a hard shell",
+    "elephants are the largest land animals",
+]
+labels = [
+    "capybara is largest rodent the the",
+    "a an armadillo hard has shell",
+    "animals are elephants land largest the",
+]
+
+# Write tests to check if sort_and_normalize works correctly
+results = [
+    1 if sort_and_normalize(p) == l else 0
+    for p, l in zip(preds, labels)
+]
+
+print("Proportion of tests passed:", sum(results) / len(results))
+
+assert sum(results) == 2, (
+    f"2 tests should pass, but got {sum(results)}. Please check how your are evaluating the results."
+)
+
+
+
+#PASS@K EVALUATION =====================================================
+
+label = "Lima"
+samples = ["Lima", "Arequipa", "Cusco", "Lima"]
+
+
+# Implement pass_at_k with signature (samples: List[str], label: str) -> int
+def pass_at_k(samples, label):
+    # return 1 if any sample matches the label, else 0
+    return_value = 1 if any(normalize(sample) == normalize(label) for sample in samples) else 0
+    return return_value
+
+print("pass@4 =", pass_at_k(samples, label))
+
+assert pass_at_k(samples, label) == 1, (
+    f"pass@4 should be 1, but got {pass_at_k(samples, label)}. Please check your pass_at_k function."
+)
+
+
+
+# LLM as a judge evaluation =====================================================
+
+
+def llm_as_judge(pred: str, rubric: str, label: str | None = None) -> float:
+    """Use an LLM to judge the quality of a prediction against a rubric and optional label."""
+
+    # Write a system prompt that instructs the LLM to use the rubric to score the prediction
+    # The response should be formatted as:
+    # <reasoning>...</reasoning>
+    # <score>FLOAT_ANSWER</score>
+    # where FLOAT_ANSWER is a float between 0 and 1.
+    # We will extract FLOAT_ANSWER from the response later
+
+    SYSTEM_PROMPT = f"""
+    You are an expert judge for evaluating the quality of predictions. 
+    You will be given a prediction, an optional label, and a rubric. 
+    Your task is to score the prediction based on the rubric and the label (if provided).
+    The response should be formatted as follows:
+    <reasoning>...</reasoning>
+    <score>FLOAT_ANSWER</score>
+    Where FLOAT_ANSWER is a float between 0 and 1 that represents the score of the prediction according to the rubric.
+    """
+
+
+    # Create a user prompt with the prediction and, optionally, the label
+    USER_PROMPT = f"""
+    Prediction: {pred} optional Label: {label if label is not None else 'N/A'} Rubric: {rubric}
+    """
+
+
+    # Call the LLM using litellm with the system and user prompts (use the model gpt-5-nano)
+    # See: https://github.com/BerriAI/litellm
+
+    response = completion(
+        model="gpt-5-nano",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": USER_PROMPT},
+        ],
+    )
+
+
+    text_response = response["choices"][0]["message"]["content"]
+    print("LLM response:", text_response)
+
+    # Extract FLOAT_ANSWER from the response
+
+    float_answer = search = re.search(r"<score>(.*?)</score>", text_response)
+
+    float_answer = str(float_answer.group(0)).strip("<score>").strip("</score>")
+
+    print("Extracted float answer:", float_answer)
+
+    return float(float_answer)
+
+
+# Write a rubric for evaluating if the prediction is the capital of the label country
+# 1.0 if correct, 0.5 if a city in the same country, 0.0 otherwise
+
+RUBRIC = """
+Score the prediction based on the following rubric:
+- If the prediction is the capital city of the country specified in the label, score 1.0
+- If the prediction is a city in the same country as the label, but not the capital, score 0.5
+- If the prediction is not a city in the same country as the label, score 0.0
+"""
+
+
+assert (
+    llm_as_judge(
+        pred="Manila",
+        label="Philippines",
+        rubric=RUBRIC,
+    )
+    == 1.0
+), "Manila is the capital of the Philippines"
+
+assert (
+    llm_as_judge(
+        pred="Cebu",
+        label="Philippines",
+        rubric=RUBRIC,
+    )
+    == 0.5
+), "Cebu is a city in the Philippines, but not the capital"
+
+assert (
+    llm_as_judge(
+        pred="Tokyo",
+        label="Philippines",
+        rubric=RUBRIC,
+    )
+    == 0.0
+), "Tokyo is not in the Philippines"
