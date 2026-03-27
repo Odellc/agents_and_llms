@@ -102,7 +102,6 @@ show_images(train_loader)
 # Tiny CNN model definition
 # No changes needed in this cell
 
-
 class TinyCNN(nn.Module):
     def __init__(self, num_classes=10):
         super().__init__()
@@ -129,9 +128,6 @@ model = TinyCNN().to(device)
 sum(p.numel() for p in model.parameters()), model.__class__.__name__
 
 
-
-
-
 @torch.no_grad()
 def accuracy_from_logits(logits, y):
     """Compute accuracy from model logits and true labels.
@@ -145,11 +141,8 @@ def accuracy_from_logits(logits, y):
     # Get boolean tensor of correct predictions, hint: use ==
     correct = preds == y
 
-
     # Return mean accuracy of the batch
     return correct.float().mean().item()
-
-
 
 
 def train_one_epoch(model, loader, criterion, optimizer, device):
@@ -191,8 +184,6 @@ def evaluate(model, loader, criterion, device):
     return total_loss / n, total_acc / n
 
 
-
-
 # Function to create a fresh model instance for each optimizer
 def make_fresh_model():
     m = TinyCNN().to(device)
@@ -220,8 +211,6 @@ optim_cfgs = {
     'adam': {'lr': 0.001, 'betas': (0.9, 0.999), 'weight_decay': 1e-4},   
     'rmsprop': {'lr': 0.001, 'alpha': 0.99, 'weight_decay': 1e-4},
 }
-
-
 
 # Train each optimizer for a few epochs and store histories
 # No changes needed in this cell
@@ -257,8 +246,6 @@ for opt_name in ["sgd", "adam", "rmsprop"]:
 
 print("\nDone training all optimizers.")
 
-
-
 # Plot validation accuracy curves
 # No changes needed in this cell
 plt.figure(figsize=(7, 4))
@@ -284,3 +271,4 @@ for _ in range(3):
     train_one_epoch(best_model, train_loader, criterion, best_opt, device)
 _, test_acc = evaluate(best_model, test_loader, criterion, device)
 print(f"Test accuracy with {best_name.upper()}: {test_acc:.4f}")
+
