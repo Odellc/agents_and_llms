@@ -11,8 +11,6 @@ if (litellm.openapi_key or "").startswith("voc-"):
 
 
 # Imports and global config
-# No changes needed in this cell
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -37,7 +35,6 @@ set_seed(1234)
 
 
 # Select device
-# No changes needed in this cell
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
@@ -53,7 +50,6 @@ test_tfms  = transforms.Compose(
 
 # Load datasets and create dataloaders
 
-# No changes needed in this cell
 train_ds = datasets.FashionMNIST(
     root="./data", train=True, download=True, transform=train_tfms
 )
@@ -80,9 +76,6 @@ len(train_ds), len(val_ds), len(test_ds)
 
 
 # Show some sample images
-# No changes needed in this cell
-
-
 def show_images(dataloader):
     batch = next(iter(dataloader))
     images, labels = batch
@@ -100,7 +93,6 @@ show_images(train_loader)
 
 
 # Tiny CNN model definition
-# No changes needed in this cell
 
 class TinyCNN(nn.Module):
     def __init__(self, num_classes=10):
@@ -165,10 +157,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         n += batch
     return running_loss / n, running_acc / n
 
-
-
 # Validation/test loop
-# No changes needed in this cell
 @torch.no_grad()
 def evaluate(model, loader, criterion, device):
     model.eval()
@@ -189,10 +178,8 @@ def make_fresh_model():
     m = TinyCNN().to(device)
     return m
 
-
 # We use CrossEntropyLoss for classification problems
 criterion = nn.CrossEntropyLoss()
-
 
 # Function to create an optimizer for a given model
 def make_optimizer(name, params):
@@ -213,8 +200,7 @@ optim_cfgs = {
 }
 
 # Train each optimizer for a few epochs and store histories
-# No changes needed in this cell
-EPOCHS = 3  # keep short for classroom runtime
+EPOCHS = 5  # keep short for live runtime
 histories = {}
 
 for opt_name in ["sgd", "adam", "rmsprop"]:
@@ -247,7 +233,6 @@ for opt_name in ["sgd", "adam", "rmsprop"]:
 print("\nDone training all optimizers.")
 
 # Plot validation accuracy curves
-# No changes needed in this cell
 plt.figure(figsize=(7, 4))
 for name, h in histories.items():
     plt.plot(range(1, len(h["val_acc"]) + 1), h["val_acc"], label=name)
@@ -260,7 +245,6 @@ plt.show()
 
 
 # Evaluate the best optimizer on the test set
-# No changes needed in this cell
 best_name = max(histories.keys(), key=lambda n: max(histories[n]["val_acc"]))
 print("Best by val acc:", best_name)
 
@@ -271,4 +255,3 @@ for _ in range(3):
     train_one_epoch(best_model, train_loader, criterion, best_opt, device)
 _, test_acc = evaluate(best_model, test_loader, criterion, device)
 print(f"Test accuracy with {best_name.upper()}: {test_acc:.4f}")
-
