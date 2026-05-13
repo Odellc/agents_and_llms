@@ -32,6 +32,7 @@ class OpenAIModels(str, Enum):
 
 MODEL = OpenAIModels.GPT_41_NANO
 
+RANGE_NUM = 5
 
 # Use GPU, MPS, or CPU, in that order of preference
 if torch.cuda.is_available():
@@ -81,12 +82,11 @@ spell the words with hyphens between the letters.'''
 def generate_records():
     for word in ALL_WORDS:
         yield {
-            # We will use the SFTTrainer which expects a certain format for prompt and completions pair
-            # in order for it to automatically construct the right tokenizations to train the model.
-            # See the documentation for more details:
-            # https://huggingface.co/docs/trl/en/sft_trainer#expected-dataset-type-and-format
-            "prompt": f"Spell the word '{word}' with hyphens between the letters.",  # Of the form "Spell the word 'word' with hyphens between the letters."
-            "completion": "-".join(word).upper() + ".",  # Of the form W-O-R-D.
+            "prompt": (
+                f"You spell words with hyphens between the letters like this W-O-R-D.\nWord:\n{word}\n\n"
+                + "Spelling:\n"
+            ),
+            "completion": "-".join(word).upper(),  # Of the form W-O-R-D.
         }
 
 
@@ -117,12 +117,13 @@ def check_spelling(
     actual_spelling = actual_spelling.strip()
 
     # Remove hyphens for a character-by-character comparison
-    proposed_spelling = proposed_spelling.replace("-", "")
-    actual_spelling =   actual_spelling.replace("-", "")
+    proposed_spelling = proposed_spelling.replace("-", "").upper()
+    actual_spelling =   actual_spelling.replace("-", "").upper()
 
     # Calculate the number of correct characters
     num_correct = sum(p1 == p2 for p1, p2 in zip(proposed_spelling, actual_spelling))
 
+    print("Checking if matching", proposed_spelling == actual_spelling )
 
     print(
         f"Proposed: {proposed_spelling} | Actual: {actual_spelling} "
@@ -143,7 +144,7 @@ check_spelling(
 #check what proportion of the first 20 words in the training set are spelled correctly by the model before fine-tuning. This will give us a baseline to compare against after fine-tuning.
 proportion_correct = 0.0
 
-for example in ds["train"].select(range(20)):
+for example in ds["train"].select(range(RANGE_NUM)):
     prompt = example["prompt"]
     completion = example["completion"]
     result = check_spelling(
@@ -168,7 +169,7 @@ print(
 
 # See: https://huggingface.co/docs/peft/package_reference/lora
 lora_config = LoraConfig(
-    r= 84,                 # Rank of the update matrices. Lower value = fewer trainable parameters.
+    r= 180,                 # Rank of the update matrices. Lower value = fewer trainable parameters.
     lora_alpha= 32,        # LoRA scaling factor.
     lora_dropout=0.01,      # Dropout probability for LoRA layers.
     bias="none",
@@ -185,11 +186,40 @@ print(
     f"Trainable params AFTER: {trainable:,} / {total:,} ({100 * trainable / total:.2f}%)"
 )
 
+output_dir = "data/model"
+
+training_args = SFTConfig(
+    output_dir=output_dir,
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=4,
+    gradient_accumulation_steps=2,
+    num_train_epochs=20,
+    learning_rate=5 * 1e-4,
+    logging_steps=20,
+    eval_strategy="steps",
+    eval_steps=20,
+    save_strategy="no",
+    report_to=[],
+    fp16=False,
+    bf16=False,
+    use_cpu=True,  # Set to True to use CPU for training (since the model is small and we want to keep it simple)
+    lr_scheduler_type="cosine",
+)
+
+
+trainer = SFTTrainer(
+    model=model,
+    train_dataset=ds["train"],
+    eval_dataset=ds["test"],
+    args=training_args,
+)
+
+trainer.train()
 
 #evaluate the model on the first 20 words in the training set again to confirm that the performance is the same before fine-tuning, since we haven't done any training yet. This will also confirm that our check_spelling function is working correctly.
 proportion_correct = 0.0
 
-for example in ds["train"].select(range(20)):
+for example in ds["train"].select(range(RANGE_NUM)):
     prompt = example["prompt"]
     completion = example["completion"]
     result = check_spelling(
